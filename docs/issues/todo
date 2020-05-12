@@ -1,0 +1,14 @@
+Pri. Lev.      Done?      Description
+--------------------------------------------------------------------------------------------------------------------------
+3              [ ]        IO interface struct (serialwrite/serialread to stream)
+2              [ ]        Performance benchmarking and performance statistics collection
+1              [ ]        entirely string-based buffer system
+2              [ ]        Cache optimization
+1              [x]        Single-include
+3              [ ]        class for gpu launch configuration
+2              [ ]        Fix ODE model for GPU usage
+3              [ ]        Troubleshoot MPI call for asynchronous solve - may need an atomic trick here...
+3              [ ]        Separate fortran calls into a proper fortran-C interface, include a fortran module for inclusion
+1              [ ]        hybrid computing data as global variables - will need hybridized data module
+1              [ ]        convert hybridization method from template mangling to namespace resolution
+1              [ ]        convert host-side user settings management to handler class

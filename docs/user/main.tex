@@ -1,0 +1,100 @@
+\documentclass[10pt]{article}
+\input{commandsL}
+\input{packagesL}
+
+\newcommand{\libname}{LibWWM}
+\renewcommand{\sec}[1]{\subsection*{#1}}
+
+\begin{document}
+
+	\sec{General Structure}
+
+	The \libname{} source is partitioned into three parts:
+
+	\ilist
+	{
+		\item \textbf{Host components:} These are source files that generally manage the top-level logic behind the wall model solver. MPI communications, memory management, and IO are
+			all managed in these functions.
+		\item \textbf{Kernel components:} These files contain the CUDA kernel invocations and the declaration for the GPU buffer decomposition parameters.
+		\item \textbf{Hybrid components:} This is where most of the work in the library happens. Common components involve operations to be done using the CUDA runtime API and,
+			more importantly, all of the wall model solving code, which is run on both the device and the host.
+	}
+
+	\sec{Procedure}
+
+	\ilist
+	{
+		\item [\textsc{I}.] The wall model module is initialized. The MPI communicator is duplicated to prevent interference, and is also split so that each node
+			has its own node communicator.
+		\item [\textsc{II}.] The main code (and the user of) is responsible for passing the necessary pointers using the Fortran-C binding. This can be done using the \texttt{ProvidedVariableAssociations} class by calling
+			the \texttt{AssociateVariable} function.
+		\item [\textsc{III}.] Domain allocation occurs. This is where each process on a single node works out how much of the workload to put on the GPU/CPU. Another MPI communicator
+			is generated for all of the processes with $> 0$ GPU-allocated points. Buffer offsets are computed.
+		\item [\textsc{IV}.] Buffer groups and transfer protocols are initialized:
+		\ilist
+		{
+			\item [i]. Global input, output, and solution buffers are named and sizes determined based on model selection.
+			\item [ii]. Allocation modes are determined. This can essentially be thought of as a smart-pointer stack system with some conditional logic.
+			\item [iii]. If necessary, host-device channels are set up to facilitate data transfer. Global device handles are brodcast via MPI.
+			\item [iv]. Host-heap and device-global allocation occurs. These are guaranteed to have matching free calls by specifying appropriate protocols.
+		}
+
+		(\textit{timestep loop})
+
+		\item [\textsc{V}.] If specified, a separate thread is started on each process with GPU-allocation to handle input data transfer. As the main code proceeds, this new thread
+			offloads input data, launches the GPU solution kernel, solves the CPU allocation, and notifies the main thread that the solution is ready. This usually happens before the main
+			thread is requesting the wall model solution anyway.
+
+		(\textit{end timestep loop})
+
+		\item [\textsc{VI}.] All resources are finalized.
+	}
+
+	\sec{Hybrid Compute Kernels}
+
+
+
+	\ezfig[0.5]{figs/gpuovw}{Overview of the data flow between the host and device.}{arrangement}
+
+
+	\sec{Buffer Management}
+
+	In this context, a buffer can simply be thought of as a working variable: An input (e.g. $u_F$), an output (e.g. $\tau_{\textrm{wall}}$), or a solution variable (e.g. $u,v,T$ etc.).
+	Presumably, different models will use different buffers, so each model should only manage the necessary ones. For example, no buffer for $T$ should be managed for an isothermal case.
+	For each model, a number of buffers are specified:
+
+	\begin{center}
+	\texttt{add\_managed<double>("u", \&(managed\_buffer->in.u), 1, 1, manage\_mode | GPU\_ENDPOINT);}
+	\end{center}
+
+	This is a declaration for an input buffer of dimension 1, with 1 entry per wall point. \texttt{GPU\_ENDPOINT} specifies that this variable is copied onto the GPU as needed for the GPU
+	allocated solve.
+
+	\begin{center}
+	\texttt{add\_managed<double>("stress\_tensors", \&(managed\_buffer->out.stress\_tensors), dim2, 1, manage\_mode | CPU\_ENDPOINT);}
+	\end{center}
+
+	Here is an example output variable. The advantage of this system is that all buffers are defined in one place, and managed completely automatically.
+
+	\sec{Compiler Flags}
+
+	\sec{Numerics}
+
+	The ODE model can be reduced to a Newton root-find, specifically
+	\equat
+	{
+		\mathbf{X}_{k+1} = \mathbf{X}_k - \beta g \Big(J_c^{-1}\mathbf{f}(\mathbf{X}_k)\Big)ap
+	}
+	with
+	\equat
+	{
+		J_c =
+		\mat{
+		\drv{\mathbf{M_e}}{\mathbf{M_v}} && \alpha_1\drv{\mathbf{M_e}}{\mathbf{T_v}}\\
+		\alpha_2\drv{\mathbf{T_e}}{\mathbf{M_v}} && \drv{\mathbf{T_e}}{\mathbf{T_v}}\\
+		}
+	}
+
+
+
+\end{document}
